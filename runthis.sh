@@ -7,6 +7,7 @@ printinfo(){
   echo "UID: WVV7-DSWG-7XYD"
   echo "Decyption Key: trKHLF10Q8n"
 }
+
 installEnableUfw() {
   sudo apt install ufw
   sudo ufw enable
@@ -71,6 +72,10 @@ checkAuthorizedUsers() {
   RED='\033[0;31m'
   inputFile="allowedusers.txt"
 
+  normalUsers=''
+  adminUsers=''
+  unauthorizedUsers=''
+
   systemusers=$(awk -F':' '($3 >= 1000 && $3 < 60000) {print $1}' /etc/passwd)
 
   if [ ! -f "$inputFile" ]; then
@@ -84,15 +89,22 @@ checkAuthorizedUsers() {
     if grep -q "^$user$" "$inputFile"; then
       # Check if the user is an admin
       if groups "$user" | grep -q -E '(sudo|wheel)'; then
-        echo "$user (Admin)"
+        adminUsers="$adminUsers\n$user"
       else
-        # echo "$user (Not Admin)"
+        normalUsers="$normalUsers\n$user"
       fi
     else
-      printf "${RED}WARNING: USER: $user NOT IN allowedusers.txt${NC} \n"
+      unauthorizedUsers="$unauthorizedUsers\n${RED}WARNING: USER: $user NOT IN allowedusers.txt${NC}"
     fi
   done
-
+  echo "Normal Users:"
+  echo -e $normalUsers
+  echo "++++++++++"
+  echo "Admin Users:"
+  echo -e $adminUsers
+  echo "---------"
+  echo "Unauthorized Users:"
+  echo -e $unauthorizedUsers
 }
 
 updatePrograms() {
@@ -132,13 +144,13 @@ commencementInstall(){
       echo "Installing all"
       sleep 3
       apt autoremove
-      apt install fail2ban
-      apt install auditd
-      apt install libpam-pwquality
-      apt install clamav
-      apt install apparmour apparmour-utils
-      apt install ufw
-      apt install gufw
+      apt install fail2ban -y
+      apt install auditd -y
+      apt install libpam-pwquality -y
+      apt install clamav -y
+      apt install apparmor apparmor-utils -y
+      apt install ufw -y
+      apt install gufw -y
       ;;
     "2")
       echo "Autoremoving..."
@@ -147,31 +159,31 @@ commencementInstall(){
       ;;
     "3")
       echo "Installing fail2ban"
-      apt install fail2ban
+      apt install fail2ban -y
       ;;
     "4")
       echo "Installing auditd"
-      apt install auditd
+      apt install auditd -y
       ;;
     "5")
       echo "Installing libpam-pwqaulity"
-      apt install libpam-pwquality
+      apt install libpam-pwquality -y
       ;;
     "6")
       echo "Installing clamav"
-      apt install clamav
+      apt install clamav -y
       ;;
     "7")
       echo "Installing apparmour & apparmour-utils"
-      apt install apparmour apparmour-utils
+      apt install apparmor apparmor-utils -y
       ;;
     "8")
       echo "Installing ufw"
-      apt install ufw
+      apt install ufw -y
       ;;
     "9")
       echo "Installing gufw"
-      apt install gufw
+      apt install gufw -y
       ;;
     *)
       echo "Unsupported item $CHOICE!" >&2
@@ -181,8 +193,64 @@ commencementInstall(){
   done
 }
 
+commencementEnable() {
+   systemctl enable ssh
+   systemctl start ssh
+
+   systemctl enable NetworkManager
+   systemctl start NetworkManager
+
+   systemctl enable rsyslog
+   systemctl start rsyslog
+
+   systemctl enable systemd-journald
+   systemctl start systemd-journald
+
+   dpkg-reconfigure --priority=low unattended-upgrades
+   systemctl enable unattended-upgrades
+   systemctl start unattended-upgrades
+   systemctl enable systemd-timesyncd
+   systemctl start systemd-timesyncd
+
+   systemctl enable ntp
+   systemctl start ntp
+
+   systemctl enable apparmor
+   systemctl start apparmor
+
+   systemctl enable cron
+   systemctl start cron
+
+   systemctl enable systemd-tmpfiles-clean.timer
+   systemctl start systemd-tmpfiles-clean.timer
+
+   systemctl enable apt-daily.timer
+   systemctl start apt-daily.timer
+
+   systemctl enable apt-daily-upgrade.timer
+   systemctl start apt-daily-upgrade.timer
+
+   systemctl enable vsftpd
+   systemctl start vsftpd
+}
+
+commencementPermissions() {
+  chmod 644 /etc/passwd
+  chmod 400 /etc/shadow
+  chmod 440 /etc/sudoers
+  # disable root login
+  passwd -l root
+}
+
+commencementUFW() {
+  ufw enable
+  ufw defualt deny incoming
+  ufw default allow outgoing
+}
+
 commencement() {
  commencementInstall
+ commencementEnable
 }
 
 welcome() {
@@ -225,18 +293,15 @@ welcome() {
 
 }
 
-# install and enable ufw
 # install run virus scanning software (clam av)
 # enable password requrements
 # ssh config
-# updates
-# Disable root (sudo passwd -l root)
-# secure importaint directories (shadow passwd sudoers)
 # snap / snap store updates
 #
-# Service disable menu
-#
-#
+# install and enable ufw (DONE)
+# updates (DONE)
+# Disable root (sudo passwd -l root) (DONE)
+# secure importaint directories (shadow passwd sudoers) (DONE)
 # Check all users against authorized users in readme (DONE)
 # Add option to change a user password to the defualt secure one (DONE)
 #
