@@ -2,6 +2,11 @@
 
 PASSWORD='!@#123qweQWE'
 
+printinfo(){
+  echo "Team Number: 17-0197"
+  echo "UID: WVV7-DSWG-7XYD"
+  echo "Decyption Key: trKHLF10Q8n"
+}
 installEnableUfw() {
   sudo apt install ufw
   sudo ufw enable
@@ -81,7 +86,7 @@ checkAuthorizedUsers() {
       if groups "$user" | grep -q -E '(sudo|wheel)'; then
         echo "$user (Admin)"
       else
-        echo "$user (Not Admin)"
+        # echo "$user (Not Admin)"
       fi
     else
       printf "${RED}WARNING: USER: $user NOT IN allowedusers.txt${NC} \n"
@@ -116,17 +121,57 @@ updatePrograms() {
   done
 }
 
-getInitialInput() {
-  CHOICES=$(whiptail --separate-output --checklist "Choose options" 10 75 5 \
-    "1" "Install and enable UFW" OFF "2" "Configure the UFW firewall with default settings" OFF 3>&1 1>&2 2>&3)
+commencementInstall(){
+  CHOICES=$(whiptail --separate-output --checklist "Choose programs to install" 15 75 9 \
+    "0" "ALL" OFF "2" "Preform autoremove" OFF "3" "fail2ban" OFF "4" "auditd" OFF "5" "libpam-pwquality" OFF "6" "clamav" OFF "7" "apparmour & apparmour-utils" OFF "8" "ufw" OFF "9" "gufw" OFF 3>&1 1>&2 2>&3)
 
   for CHOICE in $CHOICES; do
+    apt update
     case "$CHOICE" in
-    "1")
-      echo "UFW was selected"
+    "0")
+      echo "Installing all"
+      sleep 3
+      apt autoremove
+      apt install fail2ban
+      apt install auditd
+      apt install libpam-pwquality
+      apt install clamav
+      apt install apparmour apparmour-utils
+      apt install ufw
+      apt install gufw
       ;;
     "2")
-      echo "Configure UFW was selected"
+      echo "Autoremoving..."
+      sleep 3
+      apt autoremove
+      ;;
+    "3")
+      echo "Installing fail2ban"
+      apt install fail2ban
+      ;;
+    "4")
+      echo "Installing auditd"
+      apt install auditd
+      ;;
+    "5")
+      echo "Installing libpam-pwqaulity"
+      apt install libpam-pwquality
+      ;;
+    "6")
+      echo "Installing clamav"
+      apt install clamav
+      ;;
+    "7")
+      echo "Installing apparmour & apparmour-utils"
+      apt install apparmour apparmour-utils
+      ;;
+    "8")
+      echo "Installing ufw"
+      apt install ufw
+      ;;
+    "9")
+      echo "Installing gufw"
+      apt install gufw
       ;;
     *)
       echo "Unsupported item $CHOICE!" >&2
@@ -134,6 +179,10 @@ getInitialInput() {
       ;;
     esac
   done
+}
+
+commencement() {
+ commencementInstall
 }
 
 welcome() {
@@ -153,15 +202,14 @@ welcome() {
 
     case $opt in
     info)
-      echo "Info"
+      printinfo
       ;;
     update)
       echo "Update"
       updatePrograms
       ;;
     commencement)
-      echo "Init"
-      getInitialInput
+      commencement
       ;;
     usrcheck)
       checkAuthorizedUsers
