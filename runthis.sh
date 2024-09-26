@@ -135,7 +135,7 @@ updatePrograms() {
 
 commencementInstall(){
   CHOICES=$(whiptail --separate-output --checklist "Choose programs to install" 15 75 9 \
-    "0" "ALL" OFF "2" "Preform autoremove" OFF "3" "fail2ban" OFF "4" "auditd" OFF "5" "libpam-pwquality" OFF "6" "clamav" OFF "7" "apparmour & apparmour-utils" OFF "8" "ufw" OFF "9" "gufw" OFF 3>&1 1>&2 2>&3)
+    "0" "ALL" OFF "2" "Preform autoremove" OFF "3" "fail2ban" OFF "4" "auditd" OFF "5" "libpam-pwquality" OFF "6" "clamav" OFF "7" "apparmor & apparmor-utils" OFF "8" "ufw" OFF "9" "gufw" OFF 3>&1 1>&2 2>&3)
 
   for CHOICE in $CHOICES; do
     apt update
@@ -174,7 +174,7 @@ commencementInstall(){
       apt install clamav -y
       ;;
     "7")
-      echo "Installing apparmour & apparmour-utils"
+      echo "Installing apparmour & apparmor-utils"
       apt install apparmor apparmor-utils -y
       ;;
     "8")
@@ -232,6 +232,12 @@ commencementEnable() {
 
    systemctl enable vsftpd
    systemctl start vsftpd
+
+   systemctl enable auditd
+   systemctl start auditd
+   
+   systemctl enable fail2ban
+   systemctl start fail2ban
 }
 
 commencementPermissions() {
@@ -244,7 +250,7 @@ commencementPermissions() {
 
 commencementUFW() {
   ufw enable
-  ufw defualt deny incoming
+  ufw defualt deny incoming ## Could be bugged
   ufw default allow outgoing
 }
 
@@ -256,12 +262,8 @@ commencementSnap() {
   sleep 10
 }
 
-commencementEnableAutopudate() {
-  apt install unattended-upgrades apt-listchanges bsd-mailx
-  dpkg-reconfigure -plow unattended-upgrades
-}
-
 commencement() {
+  ## This always has to be run first DO NOT MOVE
  commencementInstall
  commencementEnable
  commencementPermissions
@@ -312,7 +314,7 @@ welcome() {
 # install run virus scanning software (clam av)
 # enable password requrements
 # ssh config
-# snap / snap store updates
+# snap / snap store updates (DONE)
 #
 # install and enable ufw (DONE)
 # updates (DONE)
