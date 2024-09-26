@@ -9,28 +9,28 @@ printinfo(){
 }
 
 installEnableUfw() {
-  sudo apt install ufw
-  sudo ufw enable
+  apt install ufw
+  ufw enable
 }
 
 enableUfwBasicSettings() {
-  sudo ufw deny incoming
-  sudo ufw allow outgoing
+  ufw deny incoming
+  ufw allow outgoing
 }
 
 installClamAV() {
-  sudo apt install clamav
+  apt install clamav
 }
 
 runClamAV() {
-  sudo apt update
-  sudo freshclam
-  sudo clamscan -r --infected --bell --remove /
+  apt update
+  freshclam
+  clamscan -r --infected --bell /
 }
 
 setPasswordAge() {
-  sudo sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/g' /etc/login.defs
-  sudo sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS 7/g' /etc/login.defs
+  sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/g' /etc/login.defs
+  sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS 7/g' /etc/login.defs
 }
 
 changeUserPassword() {
@@ -61,7 +61,7 @@ changeUserPassword() {
   # Change passwords for selected users
   for user in $selected_users; do
     echo "Changing password for $user"
-    echo "$user:$PASSWORD" | sudo chpasswd
+    echo "$user:$PASSWORD" | chpasswd
   done
 
   echo "Password change operations completed."
@@ -248,9 +248,25 @@ commencementUFW() {
   ufw default allow outgoing
 }
 
+commencementSnap() {
+  snap refresh
+  killall snap-store
+  snap refresh
+  echo "Please open snap store now"
+  sleep 10
+}
+
+commencementEnableAutopudate() {
+  apt install unattended-upgrades apt-listchanges bsd-mailx
+  dpkg-reconfigure -plow unattended-upgrades
+}
+
 commencement() {
  commencementInstall
  commencementEnable
+ commencementPermissions
+ commencementUFW
+ commencementSnap
 }
 
 welcome() {
