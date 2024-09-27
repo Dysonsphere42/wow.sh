@@ -18,12 +18,9 @@ enableUfwBasicSettings() {
   ufw allow outgoing
 }
 
-installClamAV() {
-  apt install clamav
-}
-
 runClamAV() {
   apt update
+  apt install clamav
   freshclam
   clamscan -r --infected --bell /
 }
