@@ -1,35 +1,44 @@
-#! /bin/bash
+#!/bin/bash
 
 PASSWORD='!@#123qweQWE'
 
-printinfo(){
+# Print system information
+printinfo() {
   echo "Team Number: 17-0197"
   echo "UID: WVV7-DSWG-7XYD"
-  echo "Decyption Key: trKHLF10Q8n"
+  echo "Decryption Key: trKHLF10Q8n"
 }
 
+# Install and enable UFW
 installEnableUfw() {
-  apt install ufw
+  apt update
+  apt install -y ufw
   ufw enable
 }
 
+# Basic UFW settings: allow outgoing, deny incoming
 enableUfwBasicSettings() {
   ufw deny incoming
   ufw allow outgoing
 }
 
+# Run ClamAV antivirus scan
 runClamAV() {
   apt update
-  apt install clamav
+  apt install -y clamav
   freshclam
   clamscan -r --infected --bell /
 }
 
+# Set password aging policies
+# Maximum password age is set to 90 days and minimum age to 7 days
 setPasswordAge() {
   sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/g' /etc/login.defs
   sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS 7/g' /etc/login.defs
 }
 
+# Change password for selected users
+# Displays a whiptail dialog to select users and change their passwords
 changeUserPassword() {
   # Get all users with UID >= 1000 (typical for regular users)
   users=$(awk -F: '$3 >= 1000 && $3 != 65534 {print $1}' /etc/passwd)
@@ -40,11 +49,8 @@ changeUserPassword() {
     options+=("$user" "" OFF)
   done
 
-  # Display the whiptail checklist
-  selected_users=$(whiptail --checklist \
-    "Select users to change passwords:" 20 60 10 \
-    "${options[@]}" \
-    3>&1 1>&2 2>&3)
+  # Display the whiptail checklist to select users to change passwords
+  selected_users=$(whiptail --checklist "Select users to change passwords:" 20 60 10 "${options[@]}" 3>&1 1>&2 2>&3)
 
   # Check if user canceled the operation
   if [ $? -ne 0 ]; then
@@ -64,21 +70,24 @@ changeUserPassword() {
   echo "Password change operations completed."
 }
 
+# Check authorized users against a predefined list
 checkAuthorizedUsers() {
   NC='\033[0m' # No Color
-  RED='\033[0;31m'
+  RED='\033[0;31m' # Red color for unauthorized users
   inputFile="allowedusers.txt"
 
   normalUsers=''
   adminUsers=''
   unauthorizedUsers=''
 
-  systemusers=$(awk -F':' '($3 >= 1000 && $3 < 60000) {print $1}' /etc/passwd)
-
+  # Check if allowed users file exists
   if [ ! -f "$inputFile" ]; then
     echo "No input file"
     exit 1
   fi
+
+  # Get all system users with UID between 1000 and 60000
+  systemusers=$(awk -F':' '($3 >= 1000 && $3 < 60000) {print $1}' /etc/passwd)
 
   # Loop through all normal users
   for user in $systemusers; do
@@ -94,42 +103,70 @@ checkAuthorizedUsers() {
       unauthorizedUsers="$unauthorizedUsers\n${RED}WARNING: USER: $user NOT IN allowedusers.txt${NC}"
     fi
   done
+
+  # Output lists of users
   echo "Normal Users:"
-  echo -e $normalUsers
+  echo -e "$normalUsers"
   echo "++++++++++"
   echo "Admin Users:"
-  echo -e $adminUsers
+  echo -e "$adminUsers"
   echo "---------"
   echo "Unauthorized Users:"
-  echo -e $unauthorizedUsers
+  echo -e "$unauthorizedUsers"
 }
 
+# Configure PAM password requirements
+configurePAMPasswordRequirements() {
+  local configFile="/etc/pam.d/common-password"
+  local pamLine1="auth\trequired\tpam_pwquality.so remember=5 retry=3"
+  local pamLine2="auth\t[success=23 default=ignore] pam_unix.so nullok"
+
+  echo "Configuring PAM password requirements in $configFile..."
+
+  # Backup the configuration file
+  backupFile="${configFile}.bak"
+  if sudo cp "$configFile" "$backupFile"; then
+    echo "Backup of $configFile created at $backupFile"
+  else
+    echo "Failed to create backup of $configFile. Aborting."
+    exit 1
+  fi
+
+  # Add the required lines if not already present
+  if ! grep -qF "$pamLine1" "$configFile"; then
+    echo -e "$pamLine1" | sudo tee -a "$configFile" > /dev/null
+    echo "Added line: $pamLine1"
+  else
+    echo "Line already exists: $pamLine1"
+  fi
+
+  if ! grep -qF "$pamLine2" "$configFile"; then
+    echo -e "$pamLine2" | sudo tee -a "$configFile" > /dev/null
+    echo "Added line: $pamLine2"
+  else
+    echo "Line already exists: $pamLine2"
+  fi
+
+  echo "PAM password requirements configuration completed."
+}
+
+# Update selected programs
 updatePrograms() {
   CHOICES=$(whiptail --separate-output --checklist "Choose options" 10 75 5 \
-    "1" "Firefox" OFF "2" "Libre Office" OFF "3" "Filezilla" OFF "4" "chromium" OFF 3>&1 1>&2 2>&3)
+    "1" "Firefox" OFF "2" "Libre Office" OFF "3" "Filezilla" OFF "4" "Chromium" OFF 3>&1 1>&2 2>&3)
 
   for CHOICE in $CHOICES; do
     case "$CHOICE" in
-    "1")
-      echo "Update Firefox"
-      ;;
-    "2")
-      echo "Update Libreoffice"
-      ;;
-    "3")
-      echo "Update Filezilla"
-      ;;
-    "4")
-      echo "Update chromium"
-      ;;
-    *)
-      echo "Unsupported item $CHOICE!" >&2
-      exit 1
-      ;;
+      "1") echo "Updating Firefox"; apt update && apt install -y firefox ;;
+      "2") echo "Updating LibreOffice"; apt update && apt install -y libreoffice ;;
+      "3") echo "Updating Filezilla"; apt update && apt install -y filezilla ;;
+      "4") echo "Updating Chromium"; apt update && apt install -y chromium ;;
+      *) echo "Unsupported item $CHOICE!" >&2; exit 1 ;;
     esac
   done
 }
 
+# Change configuration in specific files
 changeConfig() {
   local configFile="$1"
   local setting="$2"
@@ -142,222 +179,97 @@ changeConfig() {
   fi
 }
 
-commencementInstall(){
+# Install selected programs
+commencementInstall() {
   CHOICES=$(whiptail --separate-output --checklist "Choose programs to install" 15 75 9 \
-    "0" "ALL" OFF "2" "Preform autoremove" OFF "3" "fail2ban" OFF "4" "auditd" OFF "5" "libpam-pwquality" OFF "6" "clamav" OFF "7" "apparmor & apparmor-utils" OFF "8" "ufw" OFF "9" "gufw" OFF 3>&1 1>&2 2>&3)
+    "0" "ALL" OFF "2" "Perform autoremove" OFF "3" "fail2ban" OFF "4" "auditd" OFF "5" "libpam-pwquality" OFF "6" "clamav" OFF "7" "AppArmor" OFF "8" "ufw" OFF "9" "gufw" OFF 3>&1 1>&2 2>&3)
 
+  apt update
   for CHOICE in $CHOICES; do
-    apt update
     case "$CHOICE" in
-    "0")
-      echo "Installing all"
-      sleep 3
-      apt autoremove -y
-      apt install fail2ban -y
-      apt install auditd -y
-      apt install libpam-pwquality -y
-      apt install clamav -y
-      apt install apparmor apparmor-utils -y
-      apt install ufw -y
-      apt install gufw -y
-      ;;
-    "2")
-      echo "Autoremoving..."
-      sleep 3
-      apt autoremove
-      ;;
-    "3")
-      echo "Installing fail2ban"
-      apt install fail2ban -y
-      ;;
-    "4")
-      echo "Installing auditd"
-      apt install auditd -y
-      ;;
-    "5")
-      echo "Installing libpam-pwqaulity"
-      apt install libpam-pwquality -y
-      ;;
-    "6")
-      echo "Installing clamav"
-      apt install clamav -y
-      ;;
-    "7")
-      echo "Installing apparmour & apparmor-utils"
-      apt install apparmor apparmor-utils -y
-      ;;
-    "8")
-      echo "Installing ufw"
-      apt install ufw -y
-      ;;
-    "9")
-      echo "Installing gufw"
-      apt install gufw -y
-      ;;
-    *)
-      echo "Unsupported item $CHOICE!" >&2
-      exit 1
-      ;;
+      "0") echo "Installing all"; apt install -y fail2ban auditd libpam-pwquality clamav apparmor ufw gufw ;;
+      "2") echo "Performing autoremove"; apt autoremove -y ;;
+      "3") echo "Installing fail2ban"; apt install -y fail2ban ;;
+      "4") echo "Installing auditd"; apt install -y auditd ;;
+      "5") echo "Installing libpam-pwquality"; apt install -y libpam-pwquality ;;
+      "6") echo "Installing clamav"; apt install -y clamav ;;
+      "7") echo "Installing AppArmor"; apt install -y apparmor ;;
+      "8") echo "Installing ufw"; apt install -y ufw ;;
+      "9") echo "Installing gufw"; apt install -y gufw ;;
+      *) echo "Unsupported item $CHOICE!" >&2; exit 1 ;;
     esac
   done
 }
 
+# Enable selected system services
 commencementEnable() {
-   systemctl enable ssh
-   systemctl start ssh
-
-   systemctl enable NetworkManager
-   systemctl start NetworkManager
-
-   systemctl enable rsyslog
-   systemctl start rsyslog
-
-   systemctl enable systemd-journald
-   systemctl start systemd-journald
-
-   dpkg-reconfigure --priority=low unattended-upgrades
-   systemctl enable unattended-upgrades
-   systemctl start unattended-upgrades
-   systemctl enable systemd-timesyncd
-   systemctl start systemd-timesyncd
-
-   systemctl enable ntp
-   systemctl start ntp
-
-   systemctl enable apparmor
-   systemctl start apparmor
-
-   systemctl enable cron
-   systemctl start cron
-
-   systemctl enable systemd-tmpfiles-clean.timer
-   systemctl start systemd-tmpfiles-clean.timer
-
-   systemctl enable apt-daily.timer
-   systemctl start apt-daily.timer
-
-   systemctl enable apt-daily-upgrade.timer
-   systemctl start apt-daily-upgrade.timer
-
-   systemctl enable vsftpd
-   systemctl start vsftpd
-
-   systemctl enable auditd
-   systemctl start auditd
-   
-   systemctl enable fail2ban
-   systemctl start fail2ban
+  for service in ssh NetworkManager rsyslog systemd-journald unattended-upgrades systemd-timesyncd ntp apparmor cron systemd-tmpfiles-clean.timer apt-daily.timer apt-daily-upgrade.timer vsftpd auditd fail2ban; do
+    systemctl enable $service
+    systemctl start $service
+  done
 }
 
+# Set permissions for important system files and disable root login
 commencementPermissions() {
   chmod 644 /etc/passwd
   chmod 400 /etc/shadow
   chmod 440 /etc/sudoers
-  # disable root login
-  passwd -l root
+  passwd -l root # disable root login
 }
 
-commencementUFW() {
-  ufw enable
-  ufw default deny incoming ## Could be bugged
-  ufw default allow outgoing
-}
-
-commencementSnap() {
-  snap refresh
-  killall snap-store
-  snap refresh
-  echo "Please open snap store now"
-  sleep 10
-}
-
-
-commencementConfigureSSHD(){
+# Configure SSHD settings
+commencementConfigureSSHD() {
   changeConfig "/etc/ssh/sshd_config" "PermitRootLogin" "no"
   changeConfig "/etc/ssh/sshd_config" "PermitEmptyPasswords" "no"
   changeConfig "/etc/ssh/sshd_config" "X11Forwarding" "no"
   changeConfig "/etc/ssh/sshd_config" "MaxAuthTries" "3"
   changeConfig "/etc/ssh/sshd_config" "ClientAliveInterval" "300"
   changeConfig "/etc/ssh/sshd_config" "ClientAliveCountMax" "2"
-  changeConfig "/etc/ssh/sshd_config" "Port" "2222" # Maybe Change Later Depends
+  changeConfig "/etc/ssh/sshd_config" "Port" "2222"
 }
 
-commencementConfigurePasswordRequirements(){
-  # Password quality
+# Configure password requirements including password quality and disabling nullok
+commencementConfigurePasswordRequirements() {
+  configurePAMPasswordRequirements
+
   pwqualityFile="/etc/security/pwquality.conf"
+  changeConfig "$pwqualityFile" "minlen" "14"
+  changeConfig "$pwqualityFile" "dcredit" "2"
+  changeConfig "$pwqualityFile" "ucredit" "2"
+  changeConfig "$pwqualityFile" "ocredit" "2"
+  changeConfig "$pwqualityFile" "lcredit" "2"
+  changeConfig "$pwqualityFile" "minclass" "1"
 
-  changeConfig "$pwqualityFile" "minlen =" "14"
-  changeConfig "$pwqualityFile" "dcredit =" "2"
-  changeConfig "$pwqualityFile" "ucredit =" "2"
-  changeConfig "$pwqualityFile" "ocredit =" "2"
-  changeConfig "$pwqualityFile" "lcredit =" "2"
-  changeConfig "$pwqualityFile" "minclass =" "1"
-
-  # Disable nullok
+  # Disable nullok in authentication
   sed -i 's/\s*nullok\b//g' /etc/pam.d/common-auth
 }
 
-commencementConfigureJaill(){
-  configureSshdParam(){
-    local configFile="$1"
-    local setting="$2"
-    local value="$3"
-  }
-}
-
+# Commence all necessary configurations (to be run initially)
 commencement() {
- ## This always has to be run first DO NOT MOVE
-# commencementInstall
-# commencementEnable
-# commencementPermissions
-# commencementUFW
-# commencementSnap
+  commencementInstall
+  commencementEnable
+  commencementPermissions
   commencementConfigurePasswordRequirements
- ## DO NOT RUN! THIS WILL BREAK AUTHENTICATION
- #commencementConfigurePasswordRequirements
 }
 
+# Display the welcome menu for selecting operations
 welcome() {
-  echo ".--.      .--.     ,-----.     .--.      .--. ";
-  echo "|  |_     |  |   .'  .-,  '.   |  |_     |  | ";
-  echo "| _( )_   |  |  / ,-.|  \ _ \  | _( )_   |  | ";
-  echo "|(_ o _)  |  | ;  \  '_ /  | : |(_ o _)  |  | ";
-  echo "| (_,_) \ |  | |  _\`,/ \ _/  | | (_,_) \ |  | ";
-  echo "|  |/    \|  | : (  '\_/ \   ; |  |/    \|  | ";
-  echo "|  '  /\  \`  |  \ \`\"/  \  ) /  |  '  /\  \`  | ";
-  echo "|    /  \    |   '. \_/\`\`\".'   |    /  \    | ";
-  echo "\`---'    \`---\`     '-----'     \`---'    \`---\` ";
-  echo "                                              ";
+  echo "Welcome to the Security Configuration Script"
   PS3="Select the operation: "
 
   select opt in info commencement clamscan usrcheck changepass; do
-
     case $opt in
-    info)
-      printinfo
-      ;;
-    clamscan)
-      runClamAV
-      ;;
-    commencement)
-      commencement
-      ;;
-    usrcheck)
-      checkAuthorizedUsers
-      ;;
-    changepass)
-      changeUserPassword
-      ;;
-    *)
-      echo "Invalid option $REPLY"
-      ;;
+      info) printinfo ;;
+      clamscan) runClamAV ;;
+      commencement) commencement ;;
+      usrcheck) checkAuthorizedUsers ;;
+      changepass) changeUserPassword ;;
+      *) echo "Invalid option $REPLY" ;;
     esac
   done
-
 }
 
 # enable password requrements (VERY BROKE)
-#
 # ssh config (DONE)
 # snap / snap store updates (DONE)
 # install run virus scanning software (clam av) (DONE)
@@ -367,5 +279,5 @@ welcome() {
 # secure importaint directories (shadow passwd sudoers) (DONE)
 # Check all users against authorized users in readme (DONE)
 # Add option to change a user password to the defualt secure one (DONE)
-#
+
 welcome
