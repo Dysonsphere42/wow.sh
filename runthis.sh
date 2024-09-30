@@ -130,6 +130,18 @@ updatePrograms() {
   done
 }
 
+changeConfig() {
+  local configFile="$1"
+  local setting="$2"
+  local value="$3"
+
+  if grep -q "^[#]*\s*$setting" "$configFile"; then
+    sed -i "s/^[#]*\s*$setting.*/$setting $value/" "$configFile"
+  else
+    echo "$setting $value" >> "$configFile"
+  fi
+}
+
 commencementInstall(){
   CHOICES=$(whiptail --separate-output --checklist "Choose programs to install" 15 75 9 \
     "0" "ALL" OFF "2" "Preform autoremove" OFF "3" "fail2ban" OFF "4" "auditd" OFF "5" "libpam-pwquality" OFF "6" "clamav" OFF "7" "apparmor & apparmor-utils" OFF "8" "ufw" OFF "9" "gufw" OFF 3>&1 1>&2 2>&3)
@@ -259,13 +271,41 @@ commencementSnap() {
   sleep 10
 }
 
+
+commencementConfigureSSHD(){
+  changeConfig "/etc/ssh/sshd_config" "PermitRootLogin" "no"
+  changeConfig "/etc/ssh/sshd_config" "PermitEmptyPasswords" "no"
+  changeConfig "/etc/ssh/sshd_config" "X11Forwarding" "no"
+  changeConfig "/etc/ssh/sshd_config" "MaxAuthTries" "3"
+  changeConfig "/etc/ssh/sshd_config" "ClientAliveInterval" "300"
+  changeConfig "/etc/ssh/sshd_config" "ClientAliveCountMax" "2"
+  changeConfig "/etc/ssh/sshd_config" "Port" "22" # Maybe Change Later Depends
+}
+
+commencementConfigurePasswordRequirements(){
+  sed -i '/^pam_permit.so/a\auth required pam_faillock.so deny=5 onerr=fail unlock_time=1800' /etc/pam.d/common-auth
+  sed -i '/pam_pwquality.so/c\auth	required        	pam_pwquality.so remember=5 retry=3' /etc/pam.d/common-password
+
+  changeConfig "/etc/security/pwquality.conf" "minlen" "14"
+  changeConfig "/etc/security/pwquality.conf" "dcredit" "-1"
+  changeConfig "/etc/security/pwquality.conf" "ucredit" "-1"
+  changeConfig "/etc/security/pwquality.conf" "ocredit" "-1"
+  changeConfig "/etc/security/pwquality.conf" "lcredit" "-1"
+
+  sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/g' /etc/login.defs
+  sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS 7/g' /etc/login.defs
+}
+
 commencement() {
-  ## This always has to be run first DO NOT MOVE
+ ## This always has to be run first DO NOT MOVE
  commencementInstall
  commencementEnable
  commencementPermissions
  commencementUFW
  commencementSnap
+
+ ## DO NOT RUN! THIS WILL BREAK AUTHENTICATION
+ #commencementConfigurePasswordRequirements
 }
 
 welcome() {
@@ -281,15 +321,14 @@ welcome() {
   echo "                                              ";
   PS3="Select the operation: "
 
-  select opt in info commencement update usrcheck changepass; do
+  select opt in info commencement clamscan usrcheck changepass; do
 
     case $opt in
     info)
       printinfo
       ;;
-    update)
-      echo "Update"
-      updatePrograms
+    clamscan)
+      runClamAV
       ;;
     commencement)
       commencement
@@ -308,11 +347,11 @@ welcome() {
 
 }
 
-# install run virus scanning software (clam av)
-# enable password requrements
-# ssh config
-# snap / snap store updates (DONE)
+# enable password requrements (VERY BROKE)
 #
+# ssh config (DONE)
+# snap / snap store updates (DONE)
+# install run virus scanning software (clam av) (DONE)
 # install and enable ufw (DONE)
 # updates (DONE)
 # Disable root (sudo passwd -l root) (DONE)
