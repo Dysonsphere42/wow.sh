@@ -152,7 +152,7 @@ commencementInstall(){
     "0")
       echo "Installing all"
       sleep 3
-      apt autoremove
+      apt autoremove -y
       apt install fail2ban -y
       apt install auditd -y
       apt install libpam-pwquality -y
@@ -259,7 +259,7 @@ commencementPermissions() {
 
 commencementUFW() {
   ufw enable
-  ufw defualt deny incoming ## Could be bugged
+  ufw default deny incoming ## Could be bugged
   ufw default allow outgoing
 }
 
@@ -279,31 +279,40 @@ commencementConfigureSSHD(){
   changeConfig "/etc/ssh/sshd_config" "MaxAuthTries" "3"
   changeConfig "/etc/ssh/sshd_config" "ClientAliveInterval" "300"
   changeConfig "/etc/ssh/sshd_config" "ClientAliveCountMax" "2"
-  changeConfig "/etc/ssh/sshd_config" "Port" "22" # Maybe Change Later Depends
+  changeConfig "/etc/ssh/sshd_config" "Port" "2222" # Maybe Change Later Depends
 }
 
 commencementConfigurePasswordRequirements(){
-  sed -i '/^pam_permit.so/a\auth required pam_faillock.so deny=5 onerr=fail unlock_time=1800' /etc/pam.d/common-auth
-  sed -i '/pam_pwquality.so/c\auth	required        	pam_pwquality.so remember=5 retry=3' /etc/pam.d/common-password
+  # Password quality
+  pwqualityFile="/etc/security/pwquality.conf"
 
-  changeConfig "/etc/security/pwquality.conf" "minlen" "14"
-  changeConfig "/etc/security/pwquality.conf" "dcredit" "-1"
-  changeConfig "/etc/security/pwquality.conf" "ucredit" "-1"
-  changeConfig "/etc/security/pwquality.conf" "ocredit" "-1"
-  changeConfig "/etc/security/pwquality.conf" "lcredit" "-1"
+  changeConfig "$pwqualityFile" "minlen =" "14"
+  changeConfig "$pwqualityFile" "dcredit =" "2"
+  changeConfig "$pwqualityFile" "ucredit =" "2"
+  changeConfig "$pwqualityFile" "ocredit =" "2"
+  changeConfig "$pwqualityFile" "lcredit =" "2"
+  changeConfig "$pwqualityFile" "minclass =" "1"
 
-  sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/g' /etc/login.defs
-  sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS 7/g' /etc/login.defs
+  # Disable nullok
+  sed -i 's/\s*nullok\b//g' /etc/pam.d/common-auth
+}
+
+commencementConfigureJaill(){
+  configureSshdParam(){
+    local configFile="$1"
+    local setting="$2"
+    local value="$3"
+  }
 }
 
 commencement() {
  ## This always has to be run first DO NOT MOVE
- commencementInstall
- commencementEnable
- commencementPermissions
- commencementUFW
- commencementSnap
-
+# commencementInstall
+# commencementEnable
+# commencementPermissions
+# commencementUFW
+# commencementSnap
+  commencementConfigurePasswordRequirements
  ## DO NOT RUN! THIS WILL BREAK AUTHENTICATION
  #commencementConfigurePasswordRequirements
 }
