@@ -18,12 +18,9 @@ enableUfwBasicSettings() {
   ufw allow outgoing
 }
 
-installClamAV() {
-  apt install clamav
-}
-
 runClamAV() {
   apt update
+  apt install clamav
   freshclam
   clamscan -r --infected --bell /
 }
@@ -133,6 +130,18 @@ updatePrograms() {
   done
 }
 
+changeConfig() {
+  local configFile="$1"
+  local setting="$2"
+  local value="$3"
+
+  if grep -q "^[#]*\s*$setting" "$configFile"; then
+    sed -i "s/^[#]*\s*$setting.*/$setting $value/" "$configFile"
+  else
+    echo "$setting $value" >> "$configFile"
+  fi
+}
+
 commencementInstall(){
   CHOICES=$(whiptail --separate-output --checklist "Choose programs to install" 15 75 9 \
     "0" "ALL" OFF "2" "Preform autoremove" OFF "3" "fail2ban" OFF "4" "auditd" OFF "5" "libpam-pwquality" OFF "6" "clamav" OFF "7" "apparmor & apparmor-utils" OFF "8" "ufw" OFF "9" "gufw" OFF 3>&1 1>&2 2>&3)
@@ -143,7 +152,7 @@ commencementInstall(){
     "0")
       echo "Installing all"
       sleep 3
-      apt autoremove
+      apt autoremove -y
       apt install fail2ban -y
       apt install auditd -y
       apt install libpam-pwquality -y
@@ -250,7 +259,7 @@ commencementPermissions() {
 
 commencementUFW() {
   ufw enable
-  ufw defualt deny incoming ## Could be bugged
+  ufw default deny incoming ## Could be bugged
   ufw default allow outgoing
 }
 
@@ -262,13 +271,50 @@ commencementSnap() {
   sleep 10
 }
 
+
+commencementConfigureSSHD(){
+  changeConfig "/etc/ssh/sshd_config" "PermitRootLogin" "no"
+  changeConfig "/etc/ssh/sshd_config" "PermitEmptyPasswords" "no"
+  changeConfig "/etc/ssh/sshd_config" "X11Forwarding" "no"
+  changeConfig "/etc/ssh/sshd_config" "MaxAuthTries" "3"
+  changeConfig "/etc/ssh/sshd_config" "ClientAliveInterval" "300"
+  changeConfig "/etc/ssh/sshd_config" "ClientAliveCountMax" "2"
+  changeConfig "/etc/ssh/sshd_config" "Port" "2222" # Maybe Change Later Depends
+}
+
+commencementConfigurePasswordRequirements(){
+  # Password quality
+  pwqualityFile="/etc/security/pwquality.conf"
+
+  changeConfig "$pwqualityFile" "minlen =" "14"
+  changeConfig "$pwqualityFile" "dcredit =" "2"
+  changeConfig "$pwqualityFile" "ucredit =" "2"
+  changeConfig "$pwqualityFile" "ocredit =" "2"
+  changeConfig "$pwqualityFile" "lcredit =" "2"
+  changeConfig "$pwqualityFile" "minclass =" "1"
+
+  # Disable nullok
+  sed -i 's/\s*nullok\b//g' /etc/pam.d/common-auth
+}
+
+commencementConfigureJaill(){
+  configureSshdParam(){
+    local configFile="$1"
+    local setting="$2"
+    local value="$3"
+  }
+}
+
 commencement() {
-  ## This always has to be run first DO NOT MOVE
- commencementInstall
- commencementEnable
- commencementPermissions
- commencementUFW
- commencementSnap
+ ## This always has to be run first DO NOT MOVE
+# commencementInstall
+# commencementEnable
+# commencementPermissions
+# commencementUFW
+# commencementSnap
+  commencementConfigurePasswordRequirements
+ ## DO NOT RUN! THIS WILL BREAK AUTHENTICATION
+ #commencementConfigurePasswordRequirements
 }
 
 welcome() {
@@ -284,15 +330,14 @@ welcome() {
   echo "                                              ";
   PS3="Select the operation: "
 
-  select opt in info commencement update usrcheck changepass; do
+  select opt in info commencement clamscan usrcheck changepass; do
 
     case $opt in
     info)
       printinfo
       ;;
-    update)
-      echo "Update"
-      updatePrograms
+    clamscan)
+      runClamAV
       ;;
     commencement)
       commencement
@@ -311,11 +356,11 @@ welcome() {
 
 }
 
-# install run virus scanning software (clam av)
-# enable password requrements
-# ssh config
-# snap / snap store updates (DONE)
+# enable password requrements (VERY BROKE)
 #
+# ssh config (DONE)
+# snap / snap store updates (DONE)
+# install run virus scanning software (clam av) (DONE)
 # install and enable ufw (DONE)
 # updates (DONE)
 # Disable root (sudo passwd -l root) (DONE)
