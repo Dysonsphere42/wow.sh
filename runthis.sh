@@ -1,3 +1,5 @@
+clean this up:
+
 #! /bin/bash
 
 PASSWORD='!@#123qweQWE'
@@ -103,6 +105,84 @@ checkAuthorizedUsers() {
   echo "Unauthorized Users:"
   echo -e $unauthorizedUsers
 }
+
+#august just added (to check)
+configurePAMPasswordRequirements() {
+  local configFile="/etc/pam.d/common-password"
+  local pamLine1="auth\trequired\tpam_pwquality.so remember=5 retry=3"
+  local pamLine2="auth\t[success=23 default=ignore] pam_unix.so nullok"
+
+  echo "Configuring PAM password requirements in $configFile..."
+
+# Backup the configuration file
+  backupFile="${configFile}.bak"
+  if sudo cp "$configFile" "$backupFile"; then
+    echo "Backup of $configFile created at $backupFile"
+  else
+    echo "Failed to create backup of $configFile. Aborting."
+    exit 1
+  fi
+
+  # Add the required lines if not already present
+  if ! grep -qF "$pamLine1" "$configFile"; then
+    echo -e "$pamLine1" | sudo tee -a "$configFile" > /dev/null
+    echo "Added line: $pamLine1"
+  else
+    echo "Line already exists: $pamLine1"
+  fi
+
+  if ! grep -qF "$pamLine2" "$configFile"; then
+    echo -e "$pamLine2" | sudo tee -a "$configFile" > /dev/null
+    echo "Added line: $pamLine2"
+  else
+    echo "Line already exists: $pamLine2"
+  fi
+
+  echo "PAM password requirements configuration completed."
+}
+
+secure_linux_setup() {
+  echo "=== Setting Up Google Authenticator for SSH ==="
+  sudo apt install -y libpam-google-authenticator
+  google-authenticator
+
+  echo "Configuring PAM for SSH Google Authenticator..."
+  echo "auth required pam_google_authenticator.so" | sudo tee -a /etc/pam.d/sshd
+  sudo sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
+  sudo systemctl restart ssh
+
+  echo "=== Setting Up Encrypted Directory Using eCryptfs ==="
+  sudo apt install -y ecryptfs-utils
+  sudo mkdir /encrypted
+  echo "Mounting encrypted filesystem..."
+  sudo mount -t ecryptfs /encrypted /encrypted <<EOF
+passphrase_passwd
+passphrase_passwd_verify
+filename_encryption_enable=y
+filename_encryption_disable=n
+key_bytes=32
+cipher=aes
+EOF
+
+  echo "=== Restricting SSH Access Using Hosts Allow/Deny ==="
+  echo "sshd: 192.168.1.0/24" | sudo tee -a /etc/hosts.allow
+  echo "ALL: ALL" | sudo tee -a /etc/hosts.deny
+
+  echo "=== Setting Up SELinux for Enhanced Access Control ==="
+  sudo apt install -y selinux-basics selinux-policy-default
+  sudo selinux-activate
+  sudo selinux-activate
+  echo "Rebooting to apply SELinux changes..."
+  sudo reboot
+
+  echo "=== Configuring Secure Time Synchronization with Chrony ==="
+  sudo apt install -y chrony
+  echo -e "server 0.pool.ntp.org iburst\nserver 1.pool.ntp.org iburst\nserver 2.pool.ntp.org iburst\nserver 3.pool.ntp.org iburst" | sudo tee -a /etc/chrony/chrony.conf
+  sudo systemctl restart chronyd
+
+  echo "=== All Security Enhancements Applied Successfully ==="
+}
+
 
 updatePrograms() {
   CHOICES=$(whiptail --separate-output --checklist "Choose options" 10 75 5 \
@@ -244,7 +324,7 @@ commencementEnable() {
 
    systemctl enable auditd
    systemctl start auditd
-   
+
    systemctl enable fail2ban
    systemctl start fail2ban
 }
@@ -322,8 +402,23 @@ commencementConfigureJaill(){
   systemctl restart fail2ban
 }
 
+check_sudo_activity() {
+  # Display relevant lines from /etc/sudoers (without comments)
+  echo "=== Sudoers File Entries Matching 'ALL' or 'NOPASSWD' ==="
+  sudo cat /etc/sudoers | grep -v '^#' | grep -E 'ALL|NOPASSWD'
+
+  # Display recent sudo activity in the auth log
+  echo -e "\n=== Sudo Sessions Opened from /var/log/auth.log ==="
+  sudo grep 'sudo' /var/log/auth.log | grep 'session opened'
+
+  # Display login details for users in the sudo group
+  echo -e "\n=== Recent Login Information for Sudo Group Members ==="
+  last | grep -E "$(getent group sudo | cut -d: -f4 | sed 's/,/|/g')"
+}
+
 commencement() {
  ## This always has to be run first DO NOT MOVE
+
  commencementInstall
  commencementEnable
  commencementPermissions
