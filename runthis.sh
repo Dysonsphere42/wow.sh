@@ -330,8 +330,10 @@ commencement() {
  commencementUFW
  commencementSnap
  commencementConfigurePasswordRequirements
+
  ## DO NOT RUN! THIS WILL BREAK AUTHENTICATION
  #commencementConfigurePasswordRequirements
+
  commencementConfigureJaill
 }
 
