@@ -232,7 +232,7 @@ commencementInstall(){
     "0")
       echo "Installing all"
       sleep 3
-      apt autoremove -y
+      apt autoremove
       apt install fail2ban -y
       apt install auditd -y
       apt install libpam-pwquality -y
@@ -378,11 +378,28 @@ commencementConfigurePasswordRequirements(){
 }
 
 commencementConfigureJaill(){
-  configureSshdParam(){
-    local configFile="$1"
-    local setting="$2"
-    local value="$3"
+  cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+  edit_fail2ban_ssh() {
+      # Check if the file exists
+      if [ ! -f /etc/fail2ban/jail.local ]; then
+          echo "Error: /etc/fail2ban/jail.local does not exist."
+          return 1
+      fi
+
+      # Use sed to edit the [ssh] section
+      sudo sed -i '/^\[ssh\]/,/^\[/ {
+          s/^enabled *=.*/enabled = true/
+          s/^port *=.*/port = ssh/
+          s/^filter *=.*/filter = sshd/
+          s/^logpath *=.*/logpath = \/var\/log\/auth.log/
+          s/^maxretry *=.*/maxretry = 3/
+          s/^bantime *=.*/bantime = 600/
+          /^\[ssh\]/,/^\[/!d
+      }' /etc/fail2ban/jail.local
+
+      echo "The [ssh] section in /etc/fail2ban/jail.local has been updated."
   }
+  systemctl restart fail2ban
 }
 
 check_sudo_activity() {
@@ -401,15 +418,18 @@ check_sudo_activity() {
 
 commencement() {
  ## This always has to be run first DO NOT MOVE
-# commencementInstall
-# commencementEnable
-# commencementPermissions
-# commencementUFW
-# commencementSnap
-# check_sudo_activity
-# secure_linux_setup
-# commencementConfigurePasswordRequirements
+
+ commencementInstall
+ commencementEnable
+ commencementPermissions
+ commencementUFW
+ commencementSnap
+ commencementConfigurePasswordRequirements
+
  ## DO NOT RUN! THIS WILL BREAK AUTHENTICATION
+ #commencementConfigurePasswordRequirements
+
+ commencementConfigureJaill
 }
 
 welcome() {
